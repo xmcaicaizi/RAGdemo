@@ -1,0 +1,13 @@
+question_id,question_text,option_key,option_text,is_correct
+1,"在Python中，哪个关键字用于定义一个函数？","A","func",FALSE
+1,"在Python中，哪个关键字用于定义一个函数？","B","def",TRUE
+1,"在Python中，哪个关键字用于定义一个函数？","C","function",FALSE
+1,"在Python中，哪个关键字用于定义一个函数？","D","define",FALSE
+2,"以下哪个不是Python的内置数据类型？","A","列表 (List)",FALSE
+2,"以下哪个不是Python的内置数据类型？","B","元组 (Tuple)",FALSE
+2,"以下哪个不是Python的内置数据类型？","C","字典 (Dictionary)",FALSE
+2,"以下哪个不是Python的内置数据类型？","D","数组 (Array)",TRUE
+3,"HTTP状态码 404 代表什么？","A","请求成功",FALSE
+3,"HTTP状态码 404 代表什么？","B","服务器内部错误",FALSE
+3,"HTTP状态码 404 代表什么？","C","未找到资源",TRUE
+3,"HTTP状态码 404 代表什么？","D","禁止访问",FALSE 

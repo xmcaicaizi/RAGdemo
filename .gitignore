@@ -1,0 +1,12 @@
+# ChromaDB
+/chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/ 
+
+# virtual environment
+myenv/

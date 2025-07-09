@@ -1,0 +1,145 @@
+import chromadb
+import pandas as pd
+from chromadb.utils import embedding_functions as chroma_ef
+import ollama
+
+# 在同一个包/文件夹下的其他模块
+import config
+from embedding_functions import DashScopeEmbeddingFunction
+
+class RAGManager:
+    """
+    一个封装了 RAG 功能的核心模块。
+    它处理知识库的生命周期（创建、填充）和检索操作。
+    """
+    def __init__(self):
+        """
+        初始化 RAGManager。
+        - 设置基于 config.py 的配置。
+        - 初始化 ChromaDB 客户端。
+        - 根据配置选择并初始化 embedding function。
+        - 获取或创建 ChromaDB 集合。
+        """
+        print("正在初始化 RAGManager...")
+        self.config = config
+        self._embedding_function = self._get_embedding_function()
+        
+        self.client = chromadb.PersistentClient(path=self.config.CHROMA_PATH)
+        self.collection = self.client.get_or_create_collection(
+            name=self.config.COLLECTION_NAME,
+            embedding_function=self._embedding_function
+        )
+        print(f"ChromaDB 集合 '{self.config.COLLECTION_NAME}' 已准备就绪。")
+        
+        # 如果需要，保留一个Ollama客户端以备直接使用
+        if self.config.EMBEDDING_PROVIDER == "ollama":
+            self.ollama_client = ollama.Client(host=self.config.OLLAMA_CONFIG['host'])
+            print("Ollama 客户端已初始化。")
+
+    def _get_embedding_function(self):
+        """
+        根据配置文件动态选择并返回相应的 embedding function。
+        """
+        provider = self.config.EMBEDDING_PROVIDER
+        print(f"选择的 embedding 服务提供商: {provider}")
+        if provider == "ollama":
+            return chroma_ef.OllamaEmbeddingFunction(
+                url=f"{self.config.OLLAMA_CONFIG['host']}/api/embeddings",
+                model_name=self.config.OLLAMA_CONFIG['model'],
+            )
+        elif provider == "dashscope":
+            return DashScopeEmbeddingFunction(
+                api_key=self.config.DASHSCOPE_CONFIG['api_key'],
+                model=self.config.DASHSCOPE_CONFIG['model'],
+                dimensions=self.config.DASHSCOPE_CONFIG['dimensions']
+            )
+        else:
+            raise ValueError(f"无效的 EMBEDDING_PROVIDER: {provider}")
+
+    def build_from_csv(self, csv_file_path: str):
+        """
+        从 CSV 文件读取数据，进行语义切片，生成向量，并存入 ChromaDB 知识库。
+        此函数是幂等的，不会重复添加已存在的条目。
+
+        参数:
+            csv_file_path (str): CSV 文件的路径。文件必须包含 'question_text', 
+                                 'option_key', 'option_text', 'is_correct', 
+                                 和 'question_id' 列。
+        """
+        print(f"--- 正在从 {csv_file_path} 构建知识库 ---")
+        try:
+            df = pd.read_csv(csv_file_path)
+            print(f"成功读取文件: '{csv_file_path}', 共 {len(df)} 行。")
+        except FileNotFoundError:
+            print(f"错误: 数据文件 '{csv_file_path}' 未找到。")
+            return
+        
+        documents, metadatas, ids = [], [], []
+
+        for _, row in df.iterrows():
+            documents.append(f"题目：{row['question_text']} 选项{row['option_key']}：{row['option_text']}")
+            metadatas.append({
+                "question_id": str(row['question_id']),
+                "question_text": row['question_text'],
+                "option_key": row['option_key'],
+                "option_text": row['option_text'],
+                "is_correct": bool(row['is_correct'])
+            })
+            ids.append(f"q{row['question_id']}_{row['option_key']}")
+            
+        existing_ids_set = set(self.collection.get(ids=ids)['ids'])
+        new_documents, new_metadatas, new_ids = [], [], []
+
+        for i, doc_id in enumerate(ids):
+            if doc_id not in existing_ids_set:
+                new_documents.append(documents[i])
+                new_metadatas.append(metadatas[i])
+                new_ids.append(ids[i])
+        
+        if not new_documents:
+            print("文件中的所有数据均已存在于知识库中，无需添加。")
+            print("--- 知识库构建完成 ---")
+            return
+
+        try:
+            print(f"正在向 ChromaDB 添加 {len(new_documents)} 条新知识...")
+            self.collection.add(documents=new_documents, metadatas=new_metadatas, ids=new_ids)
+            print(f"成功添加 {len(new_documents)} 条。")
+        except Exception as e:
+            print(f"向 ChromaDB 添加数据时出错。请检查您的 '{self.config.EMBEDDING_PROVIDER}' 服务。")
+            print(f"详细错误: {e}")
+
+        print("--- 知识库构建完成 ---")
+
+    def search(self, query: str, top_k: int = 5) -> dict:
+        """
+        在知识库中执行语义搜索。
+
+        参数:
+            query (str): 搜索查询文本。
+            top_k (int): 返回的最相关结果数量。
+
+        返回:
+            dict: 包含搜索结果的字典。
+        """
+        print(f"正在为查询执行搜索: '{query}' (top_k={top_k})")
+        try:
+            results = self.collection.query(query_texts=[query], n_results=top_k)
+            
+            response_data = []
+            if results and results.get('ids') and results['ids'][0]:
+                for i in range(len(results['ids'][0])):
+                    response_data.append({
+                        "id": results['ids'][0][i],
+                        "content": results['documents'][0][i],
+                        "metadata": results['metadatas'][0][i],
+                        "distance": results['distances'][0][i]
+                    })
+            return {
+                "provider": self.config.EMBEDDING_PROVIDER,
+                "query": query,
+                "results": response_data
+            }
+        except Exception as e:
+            print(f"搜索过程中发生错误: {e}")
+            raise 

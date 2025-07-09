@@ -1,110 +1,86 @@
-# 基于 Ollama 和 DashScope 的可切换 RAG 知识库 API
+# RAG 功能模块与 API 服务
 
-本项目是一个灵活的、可配置的 RAG 解决方案，演示了如何为试卷客观题构建一个基于“语义切片”的知识库。它同时支持 **Ollama 本地部署**和**阿里云 DashScope 云服务**两种 Embedding 模式，您可以通过简单的配置进行切换。
+本项目提供了一个封装好的 RAG (Retrieval-Augmented Generation) 功能模块，以及一个基于该模块的 FastAPI 服务。它旨在为试卷客观题构建一个高效的 RAG 知识库，并支持在 **Ollama 本地部署**和**阿里云 DashScope 云服务**之间灵活切换 Embedding 模型。
 
-该项目通过一个 FastAPI 接口提供服务，可轻松与 n8n 等自动化工具集成。
+## 核心架构：`RAGManager` 模块
 
-## 核心技术栈
+项目的核心是 `rag_module.py` 文件中定义的 `RAGManager` 类。这个类封装了所有 RAG 相关的核心逻辑，包括：
 
-- **Embedding 服务 (可切换)**:
-    - **`Ollama`**: 在本地轻松部署和管理大语言模型，如 `qwen3-embedding`。
-    - **`DashScope`**: 使用阿里云百炼提供的 `text-embedding-v4` 等高性能在线 Embedding 服务。
-- **向量数据库**: `ChromaDB` - 轻量级、对开发者友好的开源向量数据库。
-- **API 框架**: `FastAPI` - 高性能的现代 Python Web 框架。
-- **配置管理**: `python-dotenv` - 用于安全管理 API 密钥等敏感信息。
+-   **初始化**: 自动根据 `config.py` 连接到 ChromaDB 并设置好所选的 Embedding 服务（Ollama 或 DashScope）。
+-   **知识库构建**: 提供 `build_from_csv(csv_file_path)` 方法，可以调用此方法并传入一个 CSV 文件路径来构建或更新知识库。
+-   **检索**: 提供 `search(query, top_k)` 方法，用于在知识库中执行语义检索。
+
+这种设计使得 RAG 功能可以被轻松地集成到任何 Python 项目中，或者作为一个独立的 API 服务运行。
 
 ## 功能特性
 
-- **双模支持**: 可在本地 Ollama 和云端 DashScope 之间一键切换，兼顾开发便利性、数据隐私和生产级性能。
-- **模块化设计**: 通过配置文件 (`config.py`) 和自定义 Embedding 函数，将服务选择与核心逻辑解耦。
-- **语义切片**: 将“题目+选项”作为独立的知识单元进行向量化，实现更精细、准确的语义检索。
-- **n8n 兼容**: 提供标准的 RESTful API 接口，可以无缝集成到 n8n 的自动化工作流中。
-- **开箱即用**: 提供了完整的代码和示例数据，只需几步即可运行。
+- **模块化设计**: 核心功能被封装在 `RAGManager` 类中，实现了逻辑和服务的分离。
+- **双模支持**: 可在本地 Ollama 和云端 DashScope 之间一键切换。
+- **调用灵活**:
+    1.  可以直接在代码中实例化 `RAGManager` 并调用其方法来构建知识库。
+    2.  可以通过运行一个独立的 FastAPI 服务来提供 RESTful 风格的 RAG 检索接口。
+- **n8n 兼容**: API 接口可以无缝集成到 n8n 等自动化工作流中。
 
-## 安装与运行指南
+## 如何使用
 
-### 1. 下载项目文件
+### 第一步：环境与配置
 
-将项目的所有文件下载到您的本地工作目录。
-
-### 2. 环境与依赖安装
-
-**a) 创建并激活虚拟环境 (推荐)**
-
-```bash
-# 创建虚拟环境
-python -m venv venv
-
-# 激活虚拟环境
-# Windows
-.\venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-```
-
-**b) 安装 Python 依赖**
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. 配置 Embedding 服务
-
-这是关键的一步。您需要决定使用 Ollama 还是 DashScope。
-
-**a) 选项一：使用 Ollama (本地部署)**
-
-1.  **安装 Ollama**: 访问 [Ollama 官网](https://ollama.com/) 并根据您的操作系统进行安装。
-2.  **拉取模型**: 在终端中运行以下命令来下载 `qwen3-embedding` 模型。
-
+1.  **创建虚拟环境并安装依赖**:
     ```bash
-    ollama pull dengcao/qwen3-embedding-0.6b
+    # 创建并激活虚拟环境 (例如 venv)
+    python -m venv venv
+    source venv/bin/activate  # 或者 .\venv\Scripts\activate
+    
+    # 安装依赖
+    pip install -r requirements.txt
     ```
-3.  **配置项目**: 打开 `config.py` 文件，确保 `EMBEDDING_PROVIDER` 设置为 `"ollama"`。
 
-    ```python
-    # config.py
-    EMBEDDING_PROVIDER = "ollama"
-    ```
+2.  **配置 Embedding 服务**:
+    - 打开 `config.py` 文件。
+    - 将 `EMBEDDING_PROVIDER` 设置为 `"ollama"` 或 `"dashscope"`。
+    - 如果使用 `"dashscope"`，请确保已创建 `.env` 文件并填入 `DASHSCOPE_API_KEY`。
+    - 如果使用 `"ollama"`，请确保 Ollama 服务正在运行，并且模型名称与 `config.py` 中的配置匹配。
 
-**b) 选项二：使用 阿里云 DashScope (云服务)**
+### 第二步：构建知识库（调用功能模块）
 
-1.  **获取 API Key**: 登录您的阿里云百炼控制台，获取 API Key。
-2.  **配置环境变量**:
-    - 将 `.env_template` 文件重命名为 `.env`。
-    - 打开 `.env` 文件，将您的 API Key 填入其中。
-      ```
-      DASHSCOPE_API_KEY="sk-your-real-api-key"
-      ```
-3.  **配置项目**: 打开 `config.py` 文件，将 `EMBEDDING_PROVIDER` 修改为 `"dashscope"`。
-
-    ```python
-    # config.py
-    EMBEDDING_PROVIDER = "dashscope"
-    ```
-    您还可以根据需要在 `config.py` 中修改 `DASHSCOPE_CONFIG` 下的模型或向量维度。
-
-### 4. 构建知识库
-
-配置好 Embedding 服务后，运行脚本来处理 `questions.csv` 数据并存入 ChromaDB。
+现在，您可以通过运行 `build_knowledge_base.py` 脚本来构建知识库。这个脚本实际上就是对 `RAGManager` 模块的调用演示。
 
 ```bash
 python build_knowledge_base.py
 ```
 
-脚本会根据您在 `config.py` 中的设置，自动调用 Ollama 或 DashScope 来生成向量。
+该脚本会实例化 `RAGManager` 并调用 `build_from_csv` 方法，使用 `config.py` 中指定的 `DATA_FILE` (`questions.csv`)。
 
-### 5. 启动 API 服务
+### 第三步：启动 RAG 检索服务 (RESTful API)
+
+运行 `main.py` 来启动 FastAPI 服务。该服务在启动时会创建一个 `RAGManager` 实例，并用它来处理所有 `/search` 请求。
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 6. 测试与集成
+启动后，您可以访问 [http://localhost:8000/docs](http://localhost:8000/docs) 来测试 API 接口。
 
-服务启动后，您可以像之前一样通过访问 [http://localhost:8000/docs](http://localhost:8000/docs) 或使用 `curl` 命令进行测试。返回的 JSON 结果中会包含一个 `provider` 字段，明确指出当前使用的是哪个 Embedding 服务。
+### 在您自己的项目中使用 `RAGManager`
 
-与 n8n 的集成方式保持不变。
+您可以非常容易地将这个 RAG 模块集成到您自己的代码中。
+
+```python
+# 在您的 aplication.py 中
+from rag_module import RAGManager
+from config import DATA_FILE
+
+# 1. 初始化管理器
+my_rag_manager = RAGManager()
+
+# 2. 从您的 CSV 文件构建知识库
+my_rag_manager.build_from_csv('path/to/your/data.csv')
+
+# 3. 执行搜索
+search_results = my_rag_manager.search("在Python里怎么定义一个函数？", top_k=3)
+
+print(search_results)
+```
 
 ## 文件结构
 
@@ -112,10 +88,11 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 .
 ├── .env_template            # 环境变量模板，用于存放 API Key
 ├── .gitignore               # 忽略不需要版本控制的文件
-├── build_knowledge_base.py  # [脚本] 读取CSV，构建向量知识库
+├── build_knowledge_base.py  # [脚本] 调用 RAGManager 构建知识库的示例
 ├── config.py                # [核心配置] 服务选择、模型名称、路径等
 ├── embedding_functions.py   # [模块] 自定义的 DashScope Embedding 函数
-├── main.py                  # [核心] FastAPI 应用，提供 API 接口
+├── main.py                  # [API] 基于 RAGManager 的 FastAPI 服务
+├── rag_module.py            # [核心模块] 包含 RAGManager 类
 ├── questions.csv            # [数据] 示例试卷数据
 └── requirements.txt         # Python 依赖列表
 ``` 

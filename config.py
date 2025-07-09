@@ -16,7 +16,7 @@ DATA_FILE = "questions.csv"
 # --- Ollama 配置 ---
 OLLAMA_CONFIG = {
     "host": "http://localhost:11434",
-    "model": "dengcao/qwen3-embedding-0.6b"
+    "model": "dengcao/Qwen3-Embedding-0.6B:F16"  # 更新模型名称以匹配您运行的版本
 }
 
 # --- 阿里云 DashScope 配置 ---

@@ -4,22 +4,7 @@
 
 ## 核心架构：`RAGManager` 模块
 
-项目的核心是 `rag_module.py` 文件中定义的 `RAGManager` 类。这个类封装了所有 RAG 相关的核心逻辑，包括：
-
--   **初始化**: 自动根据 `config.py` 连接到 ChromaDB 并设置好所选的 Embedding 服务（Ollama 或 DashScope）。
--   **知识库构建**: 提供 `build_from_csv(csv_file_path)` 方法，可以调用此方法并传入一个 CSV 文件路径来构建或更新知识库。
--   **检索**: 提供 `search(query, top_k)` 方法，用于在知识库中执行语义检索。
-
-这种设计使得 RAG 功能可以被轻松地集成到任何 Python 项目中，或者作为一个独立的 API 服务运行。
-
-## 功能特性
-
-- **模块化设计**: 核心功能被封装在 `RAGManager` 类中，实现了逻辑和服务的分离。
-- **双模支持**: 可在本地 Ollama 和云端 DashScope 之间一键切换。
-- **调用灵活**:
-    1.  可以直接在代码中实例化 `RAGManager` 并调用其方法来构建知识库。
-    2.  可以通过运行一个独立的 FastAPI 服务来提供 RESTful 风格的 RAG 检索接口。
-- **n8n 兼容**: API 接口可以无缝集成到 n8n 等自动化工作流中。
+项目的核心是 `rag_module.py` 文件中定义的 `RAGManager` 类。这个类封装了所有 RAG 相关的核心逻辑，使得 RAG 功能可以被轻松地集成到任何 Python 项目中，或者作为一个独立的 API 服务运行。
 
 ## 如何使用
 
@@ -36,63 +21,123 @@
     ```
 
 2.  **配置 Embedding 服务**:
-    - 打开 `config.py` 文件。
-    - 将 `EMBEDDING_PROVIDER` 设置为 `"ollama"` 或 `"dashscope"`。
+    - 打开 `config.py` 文件，将 `EMBEDDING_PROVIDER` 设置为 `"ollama"` 或 `"dashscope"`。
     - 如果使用 `"dashscope"`，请确保已创建 `.env` 文件并填入 `DASHSCOPE_API_KEY`。
     - 如果使用 `"ollama"`，请确保 Ollama 服务正在运行，并且模型名称与 `config.py` 中的配置匹配。
 
-### 第二步：构建知识库（调用功能模块）
+### 第二步：选择使用模式
 
-现在，您可以通过运行 `build_knowledge_base.py` 脚本来构建知识库。这个脚本实际上就是对 `RAGManager` 模块的调用演示。
+您可以根据需求，选择以下两种模式之一来使用本项目。
+
+---
+
+### 模式一：调用函数处理 `.CSV` 文件
+
+此模式直接使用 `RAGManager` 模块来构建知识库，满足您的第一个需求。
+
+**1. 运行示例脚本**
+
+我们提供了一个 `build_knowledge_base.py` 脚本作为调用示例。它会实例化 `RAGManager` 并调用其 `build_from_csv` 方法来处理 `questions.csv` 文件。
 
 ```bash
 python build_knowledge_base.py
 ```
 
-该脚本会实例化 `RAGManager` 并调用 `build_from_csv` 方法，使用 `config.py` 中指定的 `DATA_FILE` (`questions.csv`)。
+**2. 在您自己的项目中使用**
 
-### 第三步：启动 RAG 检索服务 (RESTful API)
-
-运行 `main.py` 来启动 FastAPI 服务。该服务在启动时会创建一个 `RAGManager` 实例，并用它来处理所有 `/search` 请求。
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-启动后，您可以访问 [http://localhost:8000/docs](http://localhost:8000/docs) 来测试 API 接口。
-
-### 在您自己的项目中使用 `RAGManager`
-
-您可以非常容易地将这个 RAG 模块集成到您自己的代码中。
+您可以非常容易地将这个 RAG 模块集成到您自己的代码中，处理您指定的任何 CSV 文件。
 
 ```python
-# 在您的 aplication.py 中
+# 在您的 application.py 中
 from rag_module import RAGManager
-from config import DATA_FILE
 
 # 1. 初始化管理器
 my_rag_manager = RAGManager()
 
 # 2. 从您的 CSV 文件构建知识库
+#    方法接收一个文件路径作为参数
 my_rag_manager.build_from_csv('path/to/your/data.csv')
 
-# 3. 执行搜索
-search_results = my_rag_manager.search("在Python里怎么定义一个函数？", top_k=3)
-
-print(search_results)
+print("知识库构建完成！")
 ```
+
+---
+
+### 模式二：通过 RESTful API 进行 RAG 检索
+
+此模式将项目作为一个独立的 API 服务运行，满足您的第二个需求。
+
+**1. 启动 API 服务**
+
+运行 `main.py` 来启动 FastAPI 服务。
+
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+服务启动后，您可以访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看交互式 API 文档。
+
+**2. API 接口详解**
+
+- **端点**: `POST /search`
+- **功能**: 接收一个查询，返回最相关的 `k` 个知识对。
+- **请求体 (Request Body)**:
+    ```json
+    {
+      "query": "您要查询的问题文本",
+      "top_k": 5
+    }
+    ```
+    - `query` (str, 必需): 您的搜索问题。
+    - `top_k` (int, 可选): 希望返回的结果数量，默认为 5。
+
+- **成功响应 (Success Response)**: `200 OK`
+    下面是一个返回结果的示例，包含了详细的字段说明。
+
+    ```json
+    {
+      "provider": "ollama", // 当前使用的 Embedding 服务提供商
+      "query": "python里怎么定义一个函数", // 您发送的原始查询
+      "results": [ // 检索结果列表
+        {
+          "id": "q1_B", // 知识对的唯一ID (question_id + option_key)
+          "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项B：def", // 知识对的原始内容
+          "metadata": { // 原始的元数据
+            "question_id": "1",
+            "question_text": "在Python中，哪个关键字用于定义一个函数？",
+            "option_key": "B",
+            "option_text": "def",
+            "is_correct": true // 指示该选项是否为正确答案
+          },
+          "distance": 0.23561... // 与查询向量的距离（或相似度得分），越小表示越相关
+        },
+        {
+          "id": "q1_C",
+          "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项C：function",
+          "metadata": {
+            "question_id": "1",
+            "question_text": "在Python中，哪个关键字用于定义一个函数？",
+            "option_key": "C",
+            "option_text": "function",
+            "is_correct": false
+          },
+          "distance": 0.89127...
+        }
+      ]
+    }
+    ```
 
 ## 文件结构
 
 ```
 .
-├── .env_template            # 环境变量模板，用于存放 API Key
-├── .gitignore               # 忽略不需要版本控制的文件
-├── build_knowledge_base.py  # [脚本] 调用 RAGManager 构建知识库的示例
-├── config.py                # [核心配置] 服务选择、模型名称、路径等
-├── embedding_functions.py   # [模块] 自定义的 DashScope Embedding 函数
-├── main.py                  # [API] 基于 RAGManager 的 FastAPI 服务
-├── rag_module.py            # [核心模块] 包含 RAGManager 类
-├── questions.csv            # [数据] 示例试卷数据
-└── requirements.txt         # Python 依赖列表
+├── .env_template            # 环境变量模板
+├── .gitignore               #
+├── build_knowledge_base.py  # [模式一] 调用模块构建知识库的示例
+├── config.py                # 全局配置文件
+├── embedding_functions.py   # 自定义 Embedding 函数
+├── main.py                  # [模式二] FastAPI 服务
+├── rag_module.py            # [核心] RAGManager 模块
+├── questions.csv            # 示例数据
+└── requirements.txt         # Python 依赖
 ``` 

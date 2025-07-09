@@ -3,4 +3,6 @@ fastapi
 uvicorn
 python-multipart
 chromadb
-pandas 
+pandas
+dashscope
+python-dotenv 

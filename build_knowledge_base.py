@@ -1,51 +1,65 @@
-import ollama
 import chromadb
 import pandas as pd
-import uuid
-from chromadb.utils import embedding_functions
+from chromadb.utils import embedding_functions as chroma_ef
+from embedding_functions import DashScopeEmbeddingFunction  # 导入我们自定义的函数
+import config  # 导入配置文件
 
-# --- 配置 ---
-OLLAMA_HOST = "http://localhost:11434"
-OLLAMA_MODEL = 'dengcao/qwen3-embedding-0.6b'
-CHROMA_PATH = "./chroma_db"
-COLLECTION_NAME = "exam_questions"
-DATA_FILE = "questions.csv" # 您的试卷数据文件
+def get_embedding_function():
+    """
+    根据配置文件选择并返回相应的 embedding function。
+    """
+    if config.EMBEDDING_PROVIDER == "ollama":
+        print(f"使用 Ollama: {config.OLLAMA_CONFIG['host']}, 模型: {config.OLLAMA_CONFIG['model']}")
+        return chroma_ef.OllamaEmbeddingFunction(
+            url=f"{config.OLLAMA_CONFIG['host']}/api/embeddings",
+            model_name=config.OLLAMA_CONFIG['model'],
+        )
+    elif config.EMBEDDING_PROVIDER == "dashscope":
+        print(f"使用 DashScope, 模型: {config.DASHSCOPE_CONFIG['model']}")
+        return DashScopeEmbeddingFunction(
+            api_key=config.DASHSCOPE_CONFIG['api_key'],
+            model=config.DASHSCOPE_CONFIG['model'],
+            dimensions=config.DASHSCOPE_CONFIG['dimensions']
+        )
+    else:
+        # 这个错误理论上在 config.py 中已经被捕获，但作为双重保障
+        raise ValueError(f"无效的 EMBEDDING_PROVIDER: {config.EMBEDDING_PROVIDER}")
 
 def build_knowledge_base():
     """
     从CSV文件读取试卷数据，进行语义切片，生成向量，并构建或更新ChromaDB知识库。
     """
     print("--- 开始构建知识库 ---")
-    
+
     # 1. 初始化 ChromaDB 客户端
     try:
-        client = chromadb.PersistentClient(path=CHROMA_PATH)
+        client = chromadb.PersistentClient(path=config.CHROMA_PATH)
         print("成功连接到 ChromaDB。")
     except Exception as e:
-        print(f"错误：无法连接到 ChromaDB at {CHROMA_PATH}。请确保ChromaDB服务正在运行。")
+        print(f"错误：无法连接到 ChromaDB at {config.CHROMA_PATH}。")
         print(f"详细错误: {e}")
         return
 
-    # 2. 定义 Embedding 函数，指定Ollama模型
-    ollama_ef = embedding_functions.OllamaEmbeddingFunction(
-        url=f"{OLLAMA_HOST}/api/embeddings",
-        model_name=OLLAMA_MODEL,
-    )
+    # 2. 根据配置获取 embedding function
+    try:
+        embedding_function = get_embedding_function()
+    except ValueError as e:
+        print(e)
+        return
 
     # 3. 获取或创建集合，并指定 embedding 函数
-    # 这让 ChromaDB 在添加文档时自动调用 Ollama 生成向量
     collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=ollama_ef
+        name=config.COLLECTION_NAME,
+        embedding_function=embedding_function
     )
-    print(f"成功获取或创建集合: '{COLLECTION_NAME}'")
+    print(f"成功获取或创建集合: '{config.COLLECTION_NAME}'")
 
     # 4. 读取并处理数据
     try:
-        df = pd.read_csv(DATA_FILE)
-        print(f"成功读取数据文件: '{DATA_FILE}'，共 {len(df)} 行。")
+        df = pd.read_csv(config.DATA_FILE)
+        print(f"成功读取数据文件: '{config.DATA_FILE}'，共 {len(df)} 行。")
     except FileNotFoundError:
-        print(f"错误：数据文件 '{DATA_FILE}' 未找到。请确保文件存在于正确路径。")
+        print(f"错误：数据文件 '{config.DATA_FILE}' 未找到。")
         return
 
     documents = []
@@ -54,10 +68,7 @@ def build_knowledge_base():
 
     print("开始处理数据并准备存入知识库...")
     for index, row in df.iterrows():
-        # 构造“题目+选项”的语义切片
         doc_text = f"题目：{row['question_text']} 选项{row['option_key']}：{row['option_text']}"
-        
-        # 准备文档、元数据和ID
         documents.append(doc_text)
         metadatas.append({
             "question_id": str(row['question_id']),
@@ -66,7 +77,6 @@ def build_knowledge_base():
             "option_text": row['option_text'],
             "is_correct": bool(row['is_correct'])
         })
-        # 使用 question_id 和 option_key 生成一个确定性的、唯一的ID
         unique_id = f"q{row['question_id']}_{row['option_key']}"
         ids.append(unique_id)
 
@@ -88,9 +98,9 @@ def build_knowledge_base():
         return
 
     # 6. 将新数据批量添加到 ChromaDB
-    # ChromaDB 将使用我们之前设置的 ollama_ef 自动为 new_documents 生成向量
     try:
         print(f"准备向知识库中添加 {len(new_documents)} 条新数据...")
+        # ChromaDB 将使用我们设置的 embedding_function 自动生成向量
         collection.add(
             documents=new_documents,
             metadatas=new_metadatas,
@@ -99,7 +109,7 @@ def build_knowledge_base():
         print(f"成功将 {len(new_documents)} 条知识对存入 ChromaDB！")
     except Exception as e:
         print("错误：向 ChromaDB 添加数据时发生错误。")
-        print(f"请检查您的 Ollama 服务是否正在运行，并且 '{OLLAMA_MODEL}' 模型是否可用。")
+        print(f"请检查您的 '{config.EMBEDDING_PROVIDER}' 服务是否配置正确且正在运行。")
         print(f"详细错误: {e}")
 
     print("--- 知识库构建完成 ---")

@@ -131,13 +131,16 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ```
 .
+├── rag_app/                 # [核心模块] 封装好的 RAG 功能包
+│   ├── __init__.py          # 将 rag_app 标记为 Python 包
+│   ├── config.py            # 全局配置文件
+│   ├── embedding_functions.py # 自定义的 Embedding 函数
+│   └── rag_module.py        # 包含 RAGManager 类的核心逻辑
+│
 ├── .env_template            # 环境变量模板
 ├── .gitignore               #
-├── build_knowledge_base.py  # [模式一] 调用模块构建知识库的示例
-├── config.py                # 全局配置文件
-├── embedding_functions.py   # 自定义 Embedding 函数
-├── main.py                  # [模式二] FastAPI 服务
-├── rag_module.py            # [核心] RAGManager 模块
+├── build_knowledge_base.py  # [模式一] 调用模块构建知识库的示例脚本
+├── main.py                  # [模式二] FastAPI 服务启动脚本
 ├── questions.csv            # 示例数据
 └── requirements.txt         # Python 依赖
 ``` 

@@ -4,8 +4,8 @@ from chromadb.utils import embedding_functions as chroma_ef
 import ollama
 
 # 在同一个包/文件夹下的其他模块
-import config
-from embedding_functions import DashScopeEmbeddingFunction
+from . import config
+from .embedding_functions import DashScopeEmbeddingFunction
 
 class RAGManager:
     """

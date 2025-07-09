@@ -1,30 +1,5 @@
-import chromadb
-import pandas as pd
-from chromadb.utils import embedding_functions as chroma_ef
-from embedding_functions import DashScopeEmbeddingFunction  # 导入我们自定义的函数
-from rag_module import RAGManager
-import config  # 导入配置文件
-
-def get_embedding_function():
-    """
-    根据配置文件选择并返回相应的 embedding function。
-    """
-    if config.EMBEDDING_PROVIDER == "ollama":
-        print(f"使用 Ollama: {config.OLLAMA_CONFIG['host']}, 模型: {config.OLLAMA_CONFIG['model']}")
-        return chroma_ef.OllamaEmbeddingFunction(
-            url=f"{config.OLLAMA_CONFIG['host']}/api/embeddings",
-            model_name=config.OLLAMA_CONFIG['model'],
-        )
-    elif config.EMBEDDING_PROVIDER == "dashscope":
-        print(f"使用 DashScope, 模型: {config.DASHSCOPE_CONFIG['model']}")
-        return DashScopeEmbeddingFunction(
-            api_key=config.DASHSCOPE_CONFIG['api_key'],
-            model=config.DASHSCOPE_CONFIG['model'],
-            dimensions=config.DASHSCOPE_CONFIG['dimensions']
-        )
-    else:
-        # 这个错误理论上在 config.py 中已经被捕获，但作为双重保障
-        raise ValueError(f"无效的 EMBEDDING_PROVIDER: {config.EMBEDDING_PROVIDER}")
+from rag_app.rag_module import RAGManager
+from rag_app import config
 
 def main():
     """

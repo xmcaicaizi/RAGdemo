@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
-import config
-from rag_module import RAGManager  # 导入核心模块
+from rag_app import config
+from rag_app.rag_module import RAGManager  # 导入核心模块
 
 # --- FastAPI 应用初始化 ---
 app = FastAPI(

@@ -47,6 +47,14 @@ print(json.dumps(search_results, indent=2, ensure_ascii=False))
 
 ---
 
+## API 文档
+
+为了方便开发者快速理解和使用本项目的 API，我们提供了详细的接口规范文档。
+
+- **[API 接口文档](./api_documentation.md)**: 点击查看所有接口的详细定义、请求/响应格式及示例。
+
+---
+
 ## 使用示例
 
 以下是两个使用 `RAGManager` 模块的示例脚本。
@@ -119,6 +127,7 @@ print(json.dumps(search_results, indent=2, ensure_ascii=False))
 │
 ├── build_knowledge_base.py  # [示例A] 调用模块构建知识库的脚本
 ├── main.py                  # [示例B] 将模块包装为 API 服务的脚本
+├── api_documentation.md     # [文档] 详细的 API 接口规范
 ├── questions.csv            # 示例数据
 ├── requirements.txt         # Python 依赖
 ├── .env_template            # 环境变量模板

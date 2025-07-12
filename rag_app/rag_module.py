@@ -62,11 +62,11 @@ class RAGManager:
         此函数是幂等的，不会重复添加已存在的条目。
 
         参数:
-            csv_file_path (str): CSV 文件的路径。文件必须包含 'question_text', 
-                                 'option_key', 'option_text', 'is_correct', 
-                                 和 'question_id' 列。
+            csv_file_path (str): CSV 文件的路径。
         """
         print(f"--- 正在从 {csv_file_path} 构建知识库 ---")
+        import os
+        filename = os.path.basename(csv_file_path)
         try:
             df = pd.read_csv(csv_file_path)
             print(f"成功读取文件: '{csv_file_path}', 共 {len(df)} 行。")
@@ -76,17 +76,28 @@ class RAGManager:
         
         documents, metadatas, ids = [], [], []
 
-        for _, row in df.iterrows():
-            documents.append(f"题目：{row['question_text']} 选项{row['option_key']}：{row['option_text']}")
-            metadatas.append({
-                "question_id": str(row['question_id']),
-                "question_text": row['question_text'],
-                "option_key": row['option_key'],
-                "option_text": row['option_text'],
-                "is_correct": bool(row['is_correct'])
-            })
-            ids.append(f"q{row['question_id']}_{row['option_key']}")
-            
+        # 针对指定的两个表格，采用精细化切片逻辑
+        if filename in ["计算机组成原理客观题.csv", "数字逻辑客观题.csv"]:
+            for _, row in df.iterrows():
+                # 只拼接题干+选项
+                doc = f"{row['题干']} {row['选项']}"
+                documents.append(doc)
+                # id 仍然用编号+选项，metadata 只保留编号
+                metadatas.append({"编号": str(row['编号'])})
+                ids.append(f"q{row['编号']}_{row['选项']}")
+        else:
+            # 保持原有逻辑
+            for _, row in df.iterrows():
+                documents.append(f"题目：{row['question_text']} 选项{row['option_key']}：{row['option_text']}")
+                metadatas.append({
+                    "question_id": str(row['question_id']),
+                    "question_text": row['question_text'],
+                    "option_key": row['option_key'],
+                    "option_text": row['option_text'],
+                    "is_correct": bool(row['is_correct'])
+                })
+                ids.append(f"q{row['question_id']}_{row['option_key']}")
+        
         existing_ids_set = set(self.collection.get(ids=ids)['ids'])
         new_documents, new_metadatas, new_ids = [], [], []
 

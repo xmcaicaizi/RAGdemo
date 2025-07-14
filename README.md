@@ -6,7 +6,7 @@
 - 通过脚本批量构建知识库
 - 将检索功能包装成 RESTful API 服务
 - **监视模块**：提供可视化前端展示，查看RAG库里的数据片段
-- **Reranker功能**：对初步检索结果进行重新排序，提升相关性
+- **精排功能**：使用Qwen3-Reranker cross-encoder对初步检索结果进行高质量重排序
 
 ## 核心模块: `RAGManager`
 
@@ -14,7 +14,7 @@
 
 ### 初始化
 ```shell
-pip install -r -requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
 `RAGManager` 在初始化时会自动读取 `rag_app/config.py` 中的配置，并设置好所有必要的组件。
 
@@ -50,6 +50,22 @@ import json
 print(json.dumps(search_results, indent=2, ensure_ascii=False))
 ```
 该方法返回的 `search_results` 是一个字典，其结构在下面的 API 示例中有详细说明。
+
+### 方法三: 精排检索
+
+使用 `search_with_rerank(query: str, top_k: int)` 方法来执行Qwen3-Reranker cross-encoder精排检索。
+
+```python
+# 调用精排方法，先embedding召回，再用Qwen3-Reranker精排
+rerank_results = rag_manager.search_with_rerank(
+    query="python里怎么定义一个函数？", 
+    top_k=3
+)
+
+# 打印结果
+import json
+print(json.dumps(rerank_results, indent=2, ensure_ascii=False))
+```
 
 ---
 
@@ -138,25 +154,43 @@ print(json.dumps(search_results, indent=2, ensure_ascii=False))
    - **搜索测试**：在界面上直接测试搜索功能
    - **元数据分析**：查看元数据字段的分布和统计
 
-### 示例 D: Reranker功能
+### 示例 D: 精排功能（Qwen3-Reranker Cross-Encoder）
 
-Reranker功能对初步检索结果进行重新排序，提升相关性。
+精排功能使用Qwen3-Reranker cross-encoder模型对初步检索结果进行高质量重排序，显著提升检索精度。
 
-**1. 重排序策略**
-   - `similarity_score`：基于相似度分数重排序
-   - `content_relevance`：基于内容相关性重排序
-   - `metadata_weight`：基于元数据权重重排序
-   - `hybrid`：混合多种策略的综合重排序
+**1. 精排流程**
+   - **初步召回**：使用Qwen3-embedding模型对知识库切片进行向量检索，获得Top-K候选
+   - **精排打分**：对每个"查询-切片"对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数
+   - **最终排序**：按相关性分数降序排序，选Top-N作为最终检索结果
 
-**2. 使用重排序搜索**
+**2. 使用精排搜索**
    ```bash
    curl -X POST "http://localhost:8000/search/reranked" \
         -H "Content-Type: application/json" \
         -d '{
           "query": "python里怎么定义一个函数？",
-          "top_k": 5,
-          "strategy": "hybrid"
+          "top_k": 5
         }'
+   ```
+
+**3. 精排结果示例**
+   ```json
+   {
+     "provider": "ollama",
+     "query": "python里怎么定义一个函数",
+     "rerank_strategy": "qwen3-reranker",
+     "results": [
+       {
+         "id": "q1_B",
+         "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项B：def",
+         "metadata": {"question_id": "1", ...},
+         "distance": 0.21,
+         "original_rank": 2,
+         "rerank_score": 0.92,
+         "final_rank": 1
+       }
+     ]
+   }
    ```
 
 ## 文件结构
@@ -169,7 +203,7 @@ Reranker功能对初步检索结果进行重新排序，提升相关性。
 │   ├── embedding_functions.py # 自定义的 Embedding 函数
 │   ├── rag_module.py        # RAGManager 类的定义
 │   ├── monitor.py           # 监视模块
-│   ├── reranker.py          # 重排序模块
+│   ├── reranker.py          # Qwen3-Reranker 精排模块
 │   ├── static/              # 静态文件目录
 │   └── templates/           # HTML模板目录
 │       └── monitor.html     # 监视页面模板
@@ -192,7 +226,7 @@ Reranker功能对初步检索结果进行重新排序，提升相关性。
 - `计算机组成原理客观题.csv`
 - `数字逻辑客观题.csv`
 
-对于上述两类表格，知识切片方式为：**每条知识仅拼接“题干+选项”**，如：
+对于上述两类表格，知识切片方式为：**每条知识仅拼接"题干+选项"**，如：
 
 ```
 在编译选项当中增加 –fopenmp。如果修改第25行代码... A. 对
@@ -200,7 +234,7 @@ Reranker功能对初步检索结果进行重新排序，提升相关性。
 
 无需保留完整字段信息，入库内容更精炼。
 
-> 其它表格将继续采用原有的“题目+选项+元数据”切片逻辑。
+> 其它表格将继续采用原有的"题目+选项+元数据"切片逻辑。
 
 ### 构建知识库示例
 
@@ -218,7 +252,7 @@ python build_knowledge_base.py  # 自动识别并处理上述表格
 
 ### 精排检索流程
 1. **初步召回**：使用Qwen3-embedding模型对知识库切片进行向量检索，获得Top-K候选。
-2. **精排打分**：对每个“查询-切片”对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数。
+2. **精排打分**：对每个"查询-切片"对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数。
 3. **最终排序**：按相关性分数降序排序，选Top-N作为最终检索结果。
 
 ### 支持的模型

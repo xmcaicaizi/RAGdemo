@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 测试新功能的脚本
-测试监视模块和Reranker功能
+测试监视模块和Qwen3-Reranker精排功能
 """
 
 import requests
@@ -10,23 +10,6 @@ import time
 
 # API基础URL
 BASE_URL = "http://localhost:8000"
-
-def test_reranker_strategies():
-    """测试获取重排序策略"""
-    print("=== 测试重排序策略API ===")
-    try:
-        response = requests.get(f"{BASE_URL}/reranker/strategies")
-        if response.status_code == 200:
-            data = response.json()
-            print("✅ 重排序策略API测试成功")
-            print(f"可用策略数量: {len(data['strategies'])}")
-            for strategy in data['strategies']:
-                print(f"  - {strategy['name']}: {strategy['description']}")
-        else:
-            print(f"❌ 重排序策略API测试失败: {response.status_code}")
-            print(response.text)
-    except Exception as e:
-        print(f"❌ 重排序策略API测试异常: {e}")
 
 def test_monitor_stats():
     """测试监视统计API"""
@@ -64,13 +47,12 @@ def test_monitor_samples():
         print(f"❌ 监视样本API测试异常: {e}")
 
 def test_reranked_search():
-    """测试重排序搜索"""
-    print("\n=== 测试重排序搜索API ===")
+    """测试Qwen3-Reranker精排搜索"""
+    print("\n=== 测试Qwen3-Reranker精排搜索API ===")
     try:
         payload = {
             "query": "python里怎么定义一个函数",
-            "top_k": 3,
-            "strategy": "hybrid"
+            "top_k": 3
         }
         response = requests.post(
             f"{BASE_URL}/search/reranked",
@@ -79,9 +61,9 @@ def test_reranked_search():
         )
         if response.status_code == 200:
             data = response.json()
-            print("✅ 重排序搜索API测试成功")
+            print("✅ Qwen3-Reranker精排搜索API测试成功")
             print(f"查询: {data.get('query', 'N/A')}")
-            print(f"策略: {data.get('rerank_strategy', 'N/A')}")
+            print(f"精排策略: {data.get('rerank_strategy', 'N/A')}")
             print(f"结果数量: {len(data.get('results', []))}")
             
             # 显示前3个结果
@@ -89,14 +71,13 @@ def test_reranked_search():
                 print(f"  结果 {i+1}:")
                 print(f"    ID: {result.get('id', 'N/A')}")
                 print(f"    内容: {result.get('content', 'N/A')[:50]}...")
-                if 'rerank_info' in result:
-                    rerank_info = result['rerank_info']
-                    print(f"    重排序分数: {rerank_info.get('rerank_score', 'N/A')}")
+                print(f"    精排分数: {result.get('rerank_score', 'N/A')}")
+                print(f"    最终排名: {result.get('final_rank', 'N/A')}")
         else:
-            print(f"❌ 重排序搜索API测试失败: {response.status_code}")
+            print(f"❌ Qwen3-Reranker精排搜索API测试失败: {response.status_code}")
             print(response.text)
     except Exception as e:
-        print(f"❌ 重排序搜索API测试异常: {e}")
+        print(f"❌ Qwen3-Reranker精排搜索API测试异常: {e}")
 
 def test_regular_search():
     """测试普通搜索作为对比"""
@@ -132,7 +113,6 @@ def main():
     time.sleep(2)
     
     # 测试各个功能
-    test_reranker_strategies()
     test_monitor_stats()
     test_monitor_samples()
     test_regular_search()

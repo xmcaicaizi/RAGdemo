@@ -37,12 +37,12 @@ MONITOR_CONFIG = {
     "max_sample_limit": 50
 }
 
-# --- Reranker配置 ---
+# --- Qwen3-Reranker配置 ---
 RERANKER_CONFIG = {
-    "default_strategy": "hybrid",
+    "model_name": "Qwen3-Reranker-4B:Q4_K_M",  # 默认使用量化模型
     "enable_reranker": True,
-    "candidate_multiplier": 3,  # 重排序时获取的候选结果倍数
-    "max_candidates": 20  # 最大候选结果数
+    "candidate_multiplier": 5,  # 精排时获取的候选结果倍数
+    "max_candidates": 30  # 最大候选结果数
 }
 
 

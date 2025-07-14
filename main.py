@@ -51,7 +51,7 @@ class SearchQuery(BaseModel):
 def search_knowledge_base(search_query: SearchQuery):
     """
     接收一个问题，使用 RAGManager 在知识库中进行语义搜索，
-    并返回最相关的“题目+选项”知识对。
+    并返回最相关的"题目+选项"知识对。
     """
     if hasattr(app.state, 'startup_error'):
         raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
@@ -117,16 +117,15 @@ async def get_monitor_samples(limit: int = 10, offset: int = 0):
         print(f"错误: {error_message}")
         raise HTTPException(status_code=500, detail=error_message)
 
-# --- Reranker相关端点 ---
+# --- 精排相关端点 ---
 class RerankQuery(BaseModel):
     query: str
     top_k: int = 5
-    strategy: str = "hybrid"
 
 @app.post("/search/reranked")
 async def search_with_rerank(rerank_query: RerankQuery):
     """
-    带重排序的搜索
+    使用Qwen3-Reranker cross-encoder进行精排检索
     """
     if hasattr(app.state, 'startup_error'):
         raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
@@ -137,32 +136,12 @@ async def search_with_rerank(rerank_query: RerankQuery):
     try:
         results = app.state.rag_manager.search_with_rerank(
             query=rerank_query.query,
-            top_k=rerank_query.top_k,
-            strategy=rerank_query.strategy
+            top_k=rerank_query.top_k
         )
         return results
     except Exception as e:
-        error_message = f"重排序搜索过程中发生内部错误: {e}"
+        error_message = f"精排搜索过程中发生内部错误: {e}"
         print(f"查询内容: {rerank_query.query}, 错误: {error_message}")
-        raise HTTPException(status_code=500, detail=error_message)
-
-@app.get("/reranker/strategies")
-async def get_reranker_strategies():
-    """
-    获取可用的重排序策略
-    """
-    if hasattr(app.state, 'startup_error'):
-        raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
-    
-    if not hasattr(app.state, 'rag_manager'):
-        raise HTTPException(status_code=503, detail="服务尚未完全初始化，请稍后再试。")
-
-    try:
-        strategies = app.state.rag_manager.reranker.get_available_strategies()
-        return {"strategies": strategies}
-    except Exception as e:
-        error_message = f"获取重排序策略失败: {e}"
-        print(f"错误: {error_message}")
         raise HTTPException(status_code=500, detail=error_message)
 
 # --- 运行服务 ---

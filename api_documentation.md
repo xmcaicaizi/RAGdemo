@@ -9,8 +9,7 @@
 | 功能模块 | 接口地址 | 方法 | 描述 |
 | :--- | :--- | :--- | :--- |
 | **知识库检索** | `/search` | `POST` | 根据输入问题在知识库中进行语义搜索 |
-| **重排序搜索** | `/search/reranked` | `POST` | 带重排序的语义搜索 |
-| **重排序策略** | `/reranker/strategies` | `GET` | 获取可用的重排序策略 |
+| **精排搜索** | `/search/reranked` | `POST` | 使用Qwen3-Reranker cross-encoder进行精排检索 |
 | **监视页面** | `/monitor` | `GET` | 知识库监视页面 |
 | **统计信息** | `/monitor/stats` | `GET` | 获取知识库统计信息 |
 | **数据样本** | `/monitor/samples` | `GET` | 获取知识库数据样本 |
@@ -62,7 +61,7 @@
 | 字段名 | 类型 | 描述 |
 | :--- | :--- | :--- |
 | `id` | `string` | 该知识条目在数据库中的唯一标识符。 |
-| `content` | `string` | 检索到的知识原文，通常是“问题+选项”的组合。 |
+| `content` | `string` | 检索到的知识原文，通常是"问题+选项"的组合。 |
 | `metadata` | `object` | 包含与该条目相关的详细元数据。 |
 | `distance`| `number` | 语义相似度距离。值越小表示相关性越高。 |
 
@@ -182,41 +181,6 @@
 
 ## 新增接口详解
 
-### `GET /reranker/strategies`
-
-获取可用的重排序策略列表。
-
-#### 响应 (Response)
-
-**成功响应 (200 OK)**
-
-```json
-{
-  "strategies": [
-    {
-      "name": "similarity_score",
-      "description": "基于向量相似度分数进行重排序",
-      "configurable": true
-    },
-    {
-      "name": "content_relevance",
-      "description": "基于内容相关性和查询词覆盖率进行重排序",
-      "configurable": true
-    },
-    {
-      "name": "metadata_weight",
-      "description": "基于元数据字段权重进行重排序",
-      "configurable": true
-    },
-    {
-      "name": "hybrid",
-      "description": "混合多种策略的综合重排序",
-      "configurable": true
-    }
-  ]
-}
-```
-
 ### `GET /monitor`
 
 知识库监视页面，提供可视化界面查看知识库数据。
@@ -315,4 +279,4 @@
 2.  **内容类型**: 所有 `POST` 请求的 `Content-Type` 必须是 `application/json`。
 3.  **服务依赖**: API 的正常运行依赖于后端配置的 Embedding 服务（Ollama 或 DashScope）和 ChromaDB 数据库。请确保这些依赖项已正确安装、配置并正在运行。
 4.  **监视功能**: 监视页面需要Jinja2模板引擎支持，确保已安装相关依赖。
-5.  **重排序功能**: 重排序功能会获取更多候选结果进行重新排序，可能增加响应时间但提升结果质量。 
+5.  **精排功能**: 精排功能使用Qwen3-Reranker cross-encoder模型，首次加载模型较慢，但后续推理速度快，能显著提升检索质量。 

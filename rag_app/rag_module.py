@@ -160,11 +160,34 @@ class RAGManager:
             print(f"搜索过程中发生错误: {e}")
             raise
     
-    def search_with_rerank(self, query: str, top_k: int = 5, strategy: str = "qwen3") -> dict:
+    def search_with_rerank(self, query: str, top_k: int = 5) -> dict:
         """
-        在知识库中执行语义搜索并用Qwen3-reranker重排序。
+        在知识库中执行语义搜索并用Qwen3-Reranker cross-encoder进行精排。
+        
+        精排流程：
+        1. 使用embedding模型进行初步召回，获取较多候选结果
+        2. 使用Qwen3-Reranker cross-encoder对每个候选进行相关性打分
+        3. 按相关性分数降序排序，返回top_k个最相关的结果
+        
+        Args:
+            query (str): 搜索查询文本
+            top_k (int): 返回的最相关结果数量
+            
+        Returns:
+            dict: 包含精排后搜索结果的字典，包含以下字段：
+                - provider: embedding服务提供商
+                - query: 原始查询
+                - rerank_strategy: 精排策略名称
+                - results: 精排后的结果列表，每个结果包含：
+                    - id: 知识片段ID
+                    - content: 知识片段内容
+                    - metadata: 元数据
+                    - distance: embedding初步检索距离
+                    - original_rank: embedding初步检索排名
+                    - rerank_score: Qwen3-Reranker相关性分数（越大越相关）
+                    - final_rank: 精排后最终排名
         """
-        print(f"正在为查询执行Qwen3重排序搜索: '{query}' (top_k={top_k})")
+        print(f"正在为查询执行Qwen3-Reranker精排搜索: '{query}' (top_k={top_k})")
         try:
             # 1. 先用embedding检索，取较多候选
             initial_top_k = min(top_k * 5, 30)
@@ -182,7 +205,7 @@ class RAGManager:
             if not candidates:
                 return {"query": query, "results": []}
 
-            # 2. 用Qwen3-reranker对每个候选打分
+            # 2. 用Qwen3-Reranker对每个候选打分
             texts = [c["content"] for c in candidates]
             scores = self.qwen3_reranker.rerank(query, texts)
             for c, s in zip(candidates, scores):
@@ -200,5 +223,5 @@ class RAGManager:
                 "results": reranked
             }
         except Exception as e:
-            print(f"Qwen3重排序搜索过程中发生错误: {e}")
+            print(f"Qwen3-Reranker精排搜索过程中发生错误: {e}")
             raise 

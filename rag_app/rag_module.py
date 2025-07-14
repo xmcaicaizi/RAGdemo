@@ -6,6 +6,8 @@ import ollama
 # 在同一个包/文件夹下的其他模块
 from . import config
 from .embedding_functions import DashScopeEmbeddingFunction
+from .reranker import RAGReranker
+from .reranker import Qwen3Reranker
 
 class RAGManager:
     """
@@ -35,6 +37,11 @@ class RAGManager:
         if self.config.EMBEDDING_PROVIDER == "ollama":
             self.ollama_client = ollama.Client(host=self.config.OLLAMA_CONFIG['host'])
             print("Ollama 客户端已初始化。")
+        
+        # 初始化重排序器
+        self.reranker = RAGReranker()
+        self.qwen3_reranker = Qwen3Reranker()
+        print("RAG重排序器已初始化。")
 
     def _get_embedding_function(self):
         """
@@ -153,4 +160,47 @@ class RAGManager:
             }
         except Exception as e:
             print(f"搜索过程中发生错误: {e}")
+            raise
+    
+    def search_with_rerank(self, query: str, top_k: int = 5, strategy: str = "qwen3") -> dict:
+        """
+        在知识库中执行语义搜索并用Qwen3-reranker重排序。
+        """
+        print(f"正在为查询执行Qwen3重排序搜索: '{query}' (top_k={top_k})")
+        try:
+            # 1. 先用embedding检索，取较多候选
+            initial_top_k = min(top_k * 5, 30)
+            results = self.collection.query(query_texts=[query], n_results=initial_top_k)
+            candidates = []
+            if results and results.get('ids') and results['ids'][0]:
+                for i in range(len(results['ids'][0])):
+                    candidates.append({
+                        "id": results['ids'][0][i],
+                        "content": results['documents'][0][i],
+                        "metadata": results['metadatas'][0][i],
+                        "distance": results['distances'][0][i],
+                        "original_rank": i + 1
+                    })
+            if not candidates:
+                return {"query": query, "results": []}
+
+            # 2. 用Qwen3-reranker对每个候选打分
+            texts = [c["content"] for c in candidates]
+            scores = self.qwen3_reranker.rerank(query, texts)
+            for c, s in zip(candidates, scores):
+                c["rerank_score"] = s
+
+            # 3. 按分数排序，取top_k
+            reranked = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)[:top_k]
+            for i, c in enumerate(reranked):
+                c["final_rank"] = i + 1
+
+            return {
+                "provider": self.config.EMBEDDING_PROVIDER,
+                "query": query,
+                "rerank_strategy": "qwen3-reranker",
+                "results": reranked
+            }
+        except Exception as e:
+            print(f"Qwen3重排序搜索过程中发生错误: {e}")
             raise 

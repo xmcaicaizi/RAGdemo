@@ -30,6 +30,21 @@ DASHSCOPE_CONFIG = {
 API_HOST = "0.0.0.0"
 API_PORT = 8000
 
+# --- 监视模块配置 ---
+MONITOR_CONFIG = {
+    "enable_monitor": True,
+    "default_sample_limit": 10,
+    "max_sample_limit": 50
+}
+
+# --- Reranker配置 ---
+RERANKER_CONFIG = {
+    "default_strategy": "hybrid",
+    "enable_reranker": True,
+    "candidate_multiplier": 3,  # 重排序时获取的候选结果倍数
+    "max_candidates": 20  # 最大候选结果数
+}
+
 
 # --- 配置验证 ---
 def validate_config():

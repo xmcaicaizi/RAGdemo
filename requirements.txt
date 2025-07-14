@@ -5,4 +5,5 @@ python-multipart
 chromadb
 pandas
 dashscope
-python-dotenv 
+python-dotenv
+jinja2 

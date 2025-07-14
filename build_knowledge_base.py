@@ -16,6 +16,13 @@ def main():
         # 使用配置文件中定义的默认数据文件
         rag_manager.build_from_csv(config.DATA_FILE)
 
+        # D:\Desktop\RAGdemo\数字逻辑客观题.csv
+        rag_manager.build_from_csv("D:/Desktop/RAGdemo/数字逻辑客观题.csv")
+
+        #D:\Desktop\RAGdemo\计算机组成原理客观题.csv
+        rag_manager.build_from_csv("D:/Desktop/RAGdemo/计算机组成原理客观题.csv")
+
+
     except Exception as e:
         print(f"脚本执行过程中发生未处理的错误: {e}")
         # 可以在这里添加更详细的错误处理或日志记录

@@ -1,3 +1,5 @@
+transformers
+torch
 ollama
 fastapi
 uvicorn

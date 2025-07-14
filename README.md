@@ -13,7 +13,9 @@
 所有核心功能都封装在 `rag_app/rag_module.py` 的 `RAGManager` 类中。您可以直接在您的 Python 项目中导入并使用它。
 
 ### 初始化
-
+```shell
+pip install -r -requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+```
 `RAGManager` 在初始化时会自动读取 `rag_app/config.py` 中的配置，并设置好所有必要的组件。
 
 ```python
@@ -83,6 +85,8 @@ print(json.dumps(search_results, indent=2, ensure_ascii=False))
 **1. 启动 API 服务**
    - 确保知识库已经通过示例 A 或其他方式构建完毕。
    ```bash
+   python main.py
+   或
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
    - 访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看交互式 API 文档。
@@ -208,26 +212,27 @@ python build_knowledge_base.py  # 自动识别并处理上述表格
 
 ---
 
-## 2024-07 更新：Qwen3-Reranker Cross-Encoder 精排集成
+## 精排（Qwen3-Reranker Cross-Encoder）能力说明
 
-### 新特性
-- 集成了Qwen3-Reranker cross-encoder模型（支持本地量化模型如Qwen3-Reranker-4B:Q4_K_M）
-- 检索流程：先用Qwen3-embedding做初步检索，再用Qwen3-reranker对候选切片进行精细化相关性打分排序
-- 支持批量推理，效率更高
-- `/search/reranked` API返回真实cross-encoder相关性分数排序结果
+本项目已集成Qwen3-Reranker cross-encoder模型，实现了高质量的相关性精排。
 
-### 使用说明
-1. **模型准备**
-   - 下载Qwen3-Reranker-4B:Q4_K_M模型（本地路径或Ollama/Transformers支持的路径）
-   - 默认模型名已设为`Qwen3-Reranker-4B:Q4_K_M`，如需更换请在`rag_app/reranker.py`中修改
-2. **依赖**
-   - 需安装`transformers`、`torch`等依赖
-   - 推荐transformers>=4.51.0，torch>=2.0
-3. **API调用**
-   - `/search/reranked`端点将自动使用Qwen3-reranker cross-encoder进行精排
-   - 返回结果中的`rerank_score`字段即为相关性分数
+### 精排检索流程
+1. **初步召回**：使用Qwen3-embedding模型对知识库切片进行向量检索，获得Top-K候选。
+2. **精排打分**：对每个“查询-切片”对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数。
+3. **最终排序**：按相关性分数降序排序，选Top-N作为最终检索结果。
 
-### 示例代码片段
+### 支持的模型
+- 默认支持本地量化模型`Qwen3-Reranker-4B:Q4_K_M`，显存占用低，推理速度快。
+- 可根据需要切换为其他Qwen3-Reranker模型。
+
+### 主要API
+- `POST /search/reranked`：返回精排后的检索结果，`rerank_score`字段即为相关性分数。
+
+### 依赖
+- `transformers >= 4.51.0`
+- `torch >= 2.0`
+
+### 使用示例
 ```python
 from rag_app.reranker import Qwen3Reranker
 reranker = Qwen3Reranker()
@@ -235,7 +240,7 @@ scores = reranker.rerank(query, [chunk1, chunk2, ...])
 ```
 
 ### 性能建议
-- 量化模型（如Q4_K_M）可大幅降低显存需求，适合本地部署
-- 首次加载模型较慢，后续推理速度较快
+- 推荐使用量化模型（如Q4_K_M）以降低显存需求。
+- 首次加载模型较慢，后续推理速度较快。
 
 --- 

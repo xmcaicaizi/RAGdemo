@@ -121,69 +121,66 @@
 
 ---
 
-## 新增接口详解
+## 精排API说明（Qwen3-Reranker Cross-Encoder）
 
 ### `POST /search/reranked`
 
-带重排序的语义搜索接口，对初步检索结果进行重新排序以提升相关性。
+对输入查询进行知识库检索，并用Qwen3-Reranker cross-encoder模型对候选切片进行高质量相关性精排。
 
-#### 请求 (Request)
+#### 请求体（JSON）
+| 字段名   | 类型    | 必需 | 说明                 | 默认值 |
+|----------|---------|------|----------------------|--------|
+| query    | string  | 是   | 用户查询             |        |
+| top_k    | int     | 否   | 返回结果数量         | 5      |
 
-**请求体 (Body)**
+#### 响应体（JSON）
+| 字段名         | 类型    | 说明                         |
+|----------------|---------|------------------------------|
+| provider       | string  | 使用的embedding服务           |
+| query          | string  | 用户原始查询                  |
+| rerank_strategy| string  | 精排策略（qwen3-reranker）    |
+| results        | array   | 精排后的结果列表              |
 
-| 字段名 | 类型 | 是否必需 | 描述 | 默认值 |
-| :--- | :--- | :--- | :--- | :--- |
-| `query` | `string` | 是 | 需要在知识库中搜索的问题或关键词。 | |
-| `top_k` | `integer`| 否 | 指定需要返回的最相关结果的数量。 | `5` |
-| `strategy` | `string` | 否 | 重排序策略。 | `"hybrid"` |
+**results数组结构**
+| 字段名        | 类型    | 说明                       |
+|---------------|---------|----------------------------|
+| id            | string  | 知识片段唯一ID             |
+| content       | string  | 知识片段内容               |
+| metadata      | object  | 元数据                     |
+| distance      | float   | embedding初步检索距离       |
+| original_rank | int     | embedding初步检索排名       |
+| rerank_score  | float   | Qwen3-Reranker相关性分数（越大越相关）|
+| final_rank    | int     | 精排后排名                  |
 
-**重排序策略选项**
-- `similarity_score`：基于相似度分数重排序
-- `content_relevance`：基于内容相关性重排序
-- `metadata_weight`：基于元数据权重重排序
-- `hybrid`：混合多种策略的综合重排序
-
-**请求示例**
-
-```json
-{
-  "query": "在Python中如何定义一个函数？",
-  "top_k": 3,
-  "strategy": "hybrid"
-}
-```
-
-#### 响应 (Response)
-
-**成功响应 (200 OK)**
-
+#### 响应示例
 ```json
 {
   "provider": "ollama",
-  "query": "在Python中如何定义一个函数？",
-  "rerank_strategy": "hybrid",
+  "query": "python里怎么定义一个函数",
+  "rerank_strategy": "qwen3-reranker",
   "results": [
     {
       "id": "q1_B",
       "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项B：def",
-      "metadata": {
-        "question_id": "1",
-        "question_text": "在Python中，哪个关键字用于定义一个函数？",
-        "option_key": "B",
-        "option_text": "def",
-        "is_correct": true
-      },
-      "distance": 0.2185,
-      "rerank_info": {
-        "strategy": "hybrid",
-        "rerank_score": 0.85,
-        "original_rank": 1,
-        "final_rank": 1
-      }
-    }
+      "metadata": {"question_id": "1", ...},
+      "distance": 0.21,
+      "original_rank": 2,
+      "rerank_score": 0.92,
+      "final_rank": 1
+    },
+    ...
   ]
 }
 ```
+
+#### 说明
+- `rerank_score`为Qwen3-Reranker cross-encoder输出的yes概率，越大越相关。
+- `final_rank`为精排后排名。
+- `distance`和`original_rank`为初步embedding检索结果，仅供参考。
+
+---
+
+## 新增接口详解
 
 ### `GET /reranker/strategies`
 

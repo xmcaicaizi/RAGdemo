@@ -6,7 +6,6 @@ import ollama
 # 在同一个包/文件夹下的其他模块
 from . import config
 from .embedding_functions import DashScopeEmbeddingFunction
-from .reranker import RAGReranker
 from .reranker import Qwen3Reranker
 
 class RAGManager:
@@ -39,9 +38,8 @@ class RAGManager:
             print("Ollama 客户端已初始化。")
         
         # 初始化重排序器
-        self.reranker = RAGReranker()
         self.qwen3_reranker = Qwen3Reranker()
-        print("RAG重排序器已初始化。")
+        print("Qwen3-Reranker已初始化。")
 
     def _get_embedding_function(self):
         """

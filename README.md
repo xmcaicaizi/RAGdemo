@@ -1,280 +1,337 @@
-# RAG 功能模块与 API 服务
+# RAG and Fine-tuning for Qwen Models
 
-本项目提供了一个封装好的 RAG (Retrieval-Augmented Generation) 功能模块。其核心是 `RAGManager` 类，它封装了构建和查询 RAG 知识库的所有逻辑。
+This project provides two main packages:
+1. A RAG (Retrieval-Augmented Generation) module for building and querying knowledge bases with semantic search and reranking capabilities
+2. A fine-tuning module for customizing Qwen models on specific datasets using LoRA
 
-同时，本项目也提供了多个使用该模块的示例：
-- 通过脚本批量构建知识库
-- 将检索功能包装成 RESTful API 服务
-- **监视模块**：提供可视化前端展示，查看RAG库里的数据片段
-- **精排功能**：使用Qwen3-Reranker cross-encoder对初步检索结果进行高质量重排序
+The system is built on top of FastAPI for a high-performance API service, ChromaDB as the vector database, and integrates with both Ollama and DashScope for embedding generation.
 
-## 核心模块: `RAGManager`
+## Table of Contents
+- [Features](#features)
+- [Architecture](#architecture)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API Endpoints](#api-endpoints)
+- [Knowledge Base Multi-table Support](#knowledge-base-multi-table-support)
+- [Monitoring](#monitoring)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
 
-所有核心功能都封装在 `rag_app/rag_module.py` 的 `RAGManager` 类中。您可以直接在您的 Python 项目中导入并使用它。
+## Features
 
-### 初始化
-```shell
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+### RAG Package
+- **Build knowledge bases** from structured CSV data with intelligent slicing strategies
+- **Semantic search** with configurable embedding models (Ollama or DashScope)
+- **High-quality reranking** with Qwen3-Reranker cross-encoder for improved search relevance
+- **Knowledge base monitoring** with a web-based interface for inspecting data fragments
+- **RESTful API** for easy integration with other services
+- **Powerful metadata analysis** for understanding your knowledge base composition
+
+### Knowledge Graph Package
+- **Knowledge graph construction** from unstructured text using LightRAG
+- **Entity and relationship extraction** powered by large language models
+- **Multiple query modes** including local, global, and hybrid search
+- **Graph-based reasoning** for complex question answering
+- **Integration with existing RAG system** for enhanced capabilities
+
+### Fine-tuning Package
+- **Support for fine-tuning Qwen models** using Parameter-Efficient Fine-Tuning (PEFT) with LoRA
+- **Data preparation and preprocessing utilities** for formatting training data
+- **Comprehensive training configuration** with customizable hyperparameters
+- **Model evaluation tools** for assessing fine-tuned model performance
+- **Integration with the RAG application** for end-to-end workflows
+
+## Architecture
+
 ```
-`RAGManager` 在初始化时会自动读取 `rag_app/config.py` 中的配置，并设置好所有必要的组件。
+rag-qwen/
+├── rag_app/                # RAG functionality package
+│   ├── __init__.py         # Package initialization
+│   ├── config.py           # Configuration settings
+│   ├── embedding_functions.py # Custom embedding functions
+│   ├── kg_module.py        # Knowledge Graph module using LightRAG
+│   ├── monitor.py          # Monitoring module
+│   ├── rag_module.py       # Core RAG module
+│   ├── reranker.py         # Qwen3-Reranker module
+│   ├── static/             # Static files for web UI
+│   └── templates/          # HTML templates
+│       └── monitor.html    # Monitoring page
+│
+├── finetune_app/           # Fine-tuning functionality package
+│   ├── __init__.py         # Package initialization
+│   ├── config.py           # Configuration settings
+│   ├── finetune_module.py  # Core fine-tuning module
+│   └── README.md           # Package documentation
+│
+├── tests/                  # Test directory
+│   ├── test_finetune.py    # Tests for fine-tuning
+│   └── test_rag.py         # Tests for RAG functionality
+│
+├── data/                   # Data directory (created at runtime)
+│   ├── questions.csv       # Example data
+│   └── ...                 # Other data files
+│
+├── models/                 # Model directory (created at runtime)
+│   └── ...                 # Fine-tuned models
+│
+├── build_knowledge_base.py # Script to build knowledge base
+├── main.py                 # Main application script
+├── pyproject.toml          # Modern Python project configuration
+├── setup.py                # Backward compatibility with older tools
+├── requirements.txt        # Dependencies list
+├── README.md               # Project documentation
+├── api_documentation.md    # API documentation
+└── .env_template           # Environment variables template
+```
+
+## Requirements
+
+- Python 3.12+
+- PyTorch 2.0+
+- Transformers 4.51.0+
+- FastAPI 0.104.0+
+- ChromaDB 0.4.0+
+- Ollama 0.1.0+ or DashScope API access
+- LightRAG 1.0.0+
+
+## Installation
+
+### Prerequisites
+1. Python 3.12+ installed
+2. (Optional) Ollama service running with required models
+3. (Optional) DashScope API key for cloud-based embeddings
+
+### Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/rag-qwen.git
+cd rag-qwen
+
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install the package and dependencies
+pip install -e .
+```
+
+Note: For Windows users, you might need to enable script execution with `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` before activating the virtual environment.
+
+## Configuration
+
+1. Copy the environment template:
+   ```bash
+   cp .env_template .env
+   ```
+
+2. Edit `.env` to add your API keys and other settings:
+   ```
+   # API Keys
+   DASHSCOPE_API_KEY="YOUR_DASHSCOPE_API_KEY_HERE"
+   
+   # RAG Configuration
+   EMBEDDING_PROVIDER="ollama"  # Options: "ollama" or "dashscope"
+   CHROMA_PATH="./chroma_db"
+   COLLECTION_NAME="exam_questions"
+   
+   # Ollama Configuration
+   OLLAMA_HOST="http://localhost:11434"
+   OLLAMA_MODEL="dengcao/Qwen3-Embedding-0.6B:F16"
+   
+   # Fine-tuning Configuration
+   BASE_MODEL="Qwen/Qwen1.5-7B"
+   USE_LORA="true"
+   MODELS_DIR="./models"
+   DATA_DIR="./data"
+   ```
+
+3. Configure the packages in:
+   - `rag_app/config.py` for RAG settings
+   - `finetune_app/config.py` for fine-tuning settings
+
+## Usage
+
+### Building a Knowledge Base
+
+Before performing searches, you need to build a knowledge base from your data:
+
+```bash
+python build_knowledge_base.py
+```
+
+Or programmatically:
 
 ```python
 from rag_app.rag_module import RAGManager
 
-# 初始化管理器，所有配置将自动加载
+# Initialize the RAG manager
 rag_manager = RAGManager()
+
+# Build knowledge base from CSV
+rag_manager.build_from_csv('questions.csv')
 ```
 
-### 方法一: 构建知识库
-
-使用 `build_from_csv(csv_file_path: str)` 方法来处理 CSV 文件并填充知识库。该方法接收一个文件路径作为参数。
+### RAG Module
 
 ```python
-# 调用方法，传入您的 CSV 文件路径
-rag_manager.build_from_csv('path/to/your/questions.csv')
-```
+from rag_app.rag_module import RAGManager
 
-### 方法二: 检索知识库
+# Initialize the RAG manager
+rag_manager = RAGManager()
 
-使用 `search(query: str, top_k: int)` 方法来执行语义检索。
+# Build knowledge base from CSV
+rag_manager.build_from_csv('questions.csv')
 
-```python
-# 调用方法，传入查询文本和需要返回的结果数量
-search_results = rag_manager.search(
+# Search the knowledge base
+results = rag_manager.search("python里怎么定义一个函数？", top_k=3)
+
+# Search with reranking
+reranked_results = rag_manager.search_with_rerank(
     query="python里怎么定义一个函数？", 
     top_k=3
 )
-
-# 打印结果
-import json
-print(json.dumps(search_results, indent=2, ensure_ascii=False))
 ```
-该方法返回的 `search_results` 是一个字典，其结构在下面的 API 示例中有详细说明。
 
-### 方法三: 精排检索
-
-使用 `search_with_rerank(query: str, top_k: int)` 方法来执行Qwen3-Reranker cross-encoder精排检索。
+### Knowledge Graph Module
 
 ```python
-# 调用精排方法，先embedding召回，再用Qwen3-Reranker精排
-rerank_results = rag_manager.search_with_rerank(
-    query="python里怎么定义一个函数？", 
-    top_k=3
-)
+from rag_app.kg_module import KGManager
+import asyncio
 
-# 打印结果
-import json
-print(json.dumps(rerank_results, indent=2, ensure_ascii=False))
+# Initialize the KG manager
+kg_manager = KGManager()
+
+# Initialize LightRAG (required for KG functionality)
+await kg_manager.initialize()
+
+# Insert text into knowledge graph
+kg_manager.insert_text("Alan Turing was a British mathematician and computer scientist. He formalized the concepts of algorithm and computation with the Turing machine.")
+
+# Query the knowledge graph (multiple modes available: local, global, hybrid)
+result = kg_manager.query("Who was Alan Turing?", mode="hybrid")
+print(result)
 ```
 
----
+### Fine-tuning Module
 
-## API 文档
+```python
+from finetune_app.finetune_module import FineTuneManager
 
-为了方便开发者快速理解和使用本项目的 API，我们提供了详细的接口规范文档。
+# Initialize the fine-tuning manager
+ft_manager = FineTuneManager()
 
-- **[API 接口文档](./api_documentation.md)**: 点击查看所有接口的详细定义、请求/响应格式及示例。
+# Prepare your data
+data_dir = ft_manager.prepare_data("path/to/your/data.json")
 
----
+# Load the base model
+ft_manager.load_model()
 
-## 使用示例
+# Fine-tune the model
+model_path = ft_manager.fine_tune(train_data_dir=data_dir)
 
-以下是两个使用 `RAGManager` 模块的示例脚本。
-
-### 示例 A: 通过脚本构建知识库
-
-`build_knowledge_base.py` 脚本演示了如何调用 `RAGManager` 来处理在 `config.py` 中定义的默认 CSV 文件。
-
-**1. 配置与环境**
-   - 确保已安装依赖 (`pip install -r requirements.txt`)。
-   - 在 `rag_app/config.py` 中配置好您的 Embedding 服务。
-
-**2. 运行脚本**
-   ```bash
-   python build_knowledge_base.py
-   ```
-
-### 示例 B: 将检索功能包装为 RESTful API
-
-`main.py` 脚本演示了如何将 `RAGManager` 的检索功能包装成一个 FastAPI 服务，这对于需要跨语言调用或与 n8n 等工具集成的场景非常有用。
-
-**1. 启动 API 服务**
-   - 确保知识库已经通过示例 A 或其他方式构建完毕。
-   ```bash
-   python main.py
-   或
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
-   - 访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看交互式 API 文档。
-   - 访问 [http://localhost:8000/monitor](http://localhost:8000/monitor) 查看知识库监视页面。
-
-**2. API 接口详解 (`POST /search`)**
-
-   - **请求体 (Request Body)**:
-     ```json
-     {
-       "query": "您要查询的问题文本",
-       "top_k": 5
-     }
-     ```
-
-   - **成功响应 (Success Response)**:
-     ```json
-     {
-       "provider": "ollama", 
-       "query": "python里怎么定义一个函数",
-       "results": [
-         {
-           "id": "q1_B",
-           "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项B：def",
-           "metadata": {
-             "question_id": "1",
-             "question_text": "在Python中，哪个关键字用于定义一个函数？",
-             "option_key": "B",
-             "option_text": "def",
-             "is_correct": true
-           },
-           "distance": 0.23561
-         }
-       ]
-     }
-     ```
-
-### 示例 C: 监视模块
-
-监视模块提供了可视化前端展示，可以查看当前RAG库里的数据片段。
-
-**1. 访问监视页面**
-   - 启动API服务后，访问 [http://localhost:8000/monitor](http://localhost:8000/monitor)
-   - 查看知识库统计信息、数据样本和元数据分析
-
-**2. 监视功能**
-   - **统计信息**：查看总文档数、集合数量、平均内容长度等
-   - **数据样本**：浏览知识库中的数据片段，支持分页
-   - **搜索测试**：在界面上直接测试搜索功能
-   - **元数据分析**：查看元数据字段的分布和统计
-
-### 示例 D: 精排功能（Qwen3-Reranker Cross-Encoder）
-
-精排功能使用Qwen3-Reranker cross-encoder模型对初步检索结果进行高质量重排序，显著提升检索精度。
-
-**1. 精排流程**
-   - **初步召回**：使用Qwen3-embedding模型对知识库切片进行向量检索，获得Top-K候选
-   - **精排打分**：对每个"查询-切片"对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数
-   - **最终排序**：按相关性分数降序排序，选Top-N作为最终检索结果
-
-**2. 使用精排搜索**
-   ```bash
-   curl -X POST "http://localhost:8000/search/reranked" \
-        -H "Content-Type: application/json" \
-        -d '{
-          "query": "python里怎么定义一个函数？",
-          "top_k": 5
-        }'
-   ```
-
-**3. 精排结果示例**
-   ```json
-   {
-     "provider": "ollama",
-     "query": "python里怎么定义一个函数",
-     "rerank_strategy": "qwen3-reranker",
-     "results": [
-       {
-         "id": "q1_B",
-         "content": "题目：在Python中，哪个关键字用于定义一个函数？ 选项B：def",
-         "metadata": {"question_id": "1", ...},
-         "distance": 0.21,
-         "original_rank": 2,
-         "rerank_score": 0.92,
-         "final_rank": 1
-       }
-     ]
-   }
-   ```
-
-## 文件结构
-
+# Evaluate the fine-tuned model
+metrics = ft_manager.evaluate(model_path=model_path)
 ```
-.
-├── rag_app/                 # [核心模块] 封装好的 RAG 功能包
-│   ├── __init__.py          # 标记为 Python 包
-│   ├── config.py            # 模块的配置文件
-│   ├── embedding_functions.py # 自定义的 Embedding 函数
-│   ├── rag_module.py        # RAGManager 类的定义
-│   ├── monitor.py           # 监视模块
-│   ├── reranker.py          # Qwen3-Reranker 精排模块
-│   ├── static/              # 静态文件目录
-│   └── templates/           # HTML模板目录
-│       └── monitor.html     # 监视页面模板
-│
-├── build_knowledge_base.py  # [示例A] 调用模块构建知识库的脚本
-├── main.py                  # [示例B] 将模块包装为 API 服务的脚本
-├── api_documentation.md     # [文档] 详细的 API 接口规范
-├── questions.csv            # 示例数据
-├── requirements.txt         # Python 依赖
-├── .env_template            # 环境变量模板
-└── .gitignore               
-``` 
 
----
+## API Endpoints
 
-## 知识库多表支持与切片逻辑
+Run the API service to access both RAG and fine-tuning functionality:
 
-本项目支持多种结构化客观题表格的知识入库，当前已适配：
+```bash
+python main.py
+```
 
-- `计算机组成原理客观题.csv`
-- `数字逻辑客观题.csv`
+Or with uvicorn directly:
 
-对于上述两类表格，知识切片方式为：**每条知识仅拼接"题干+选项"**，如：
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
+### Available Endpoints
+
+- **API Root**: [http://localhost:8000/](http://localhost:8000/) - Shows available endpoints
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs) - Interactive API documentation
+- **Monitor UI**: [http://localhost:8000/monitor](http://localhost:8000/monitor) - Knowledge base monitoring interface
+- **Search**: `POST /search` - Semantic search in knowledge base
+- **Reranked Search**: `POST /search/reranked` - Search with Qwen3-Reranker reranking
+- **Fine-tuning**: `POST /finetune` - Fine-tune a Qwen model
+- **Monitor Stats**: `GET /monitor/stats` - Get knowledge base statistics
+- **Monitor Samples**: `GET /monitor/samples` - Get sample knowledge base entries
+- **KG Insert**: `POST /kg/insert` - Insert text into knowledge graph
+- **KG Query**: `POST /kg/query` - Query the knowledge graph
+
+For detailed API documentation, see [API Documentation](./api_documentation.md).
+
+## Knowledge Base Multi-table Support
+
+The project supports multiple structured objective question tables, with specialized processing for:
+- `计算机组成原理客观题.csv` (Computer Organization Objective Questions)
+- `数字逻辑客观题.csv` (Digital Logic Objective Questions)
+
+For these tables, the knowledge slicing method is: **only concatenate "question stem + options"**, such as:
 ```
 在编译选项当中增加 –fopenmp。如果修改第25行代码... A. 对
 ```
 
-无需保留完整字段信息，入库内容更精炼。
+No need to retain complete field information, making the database content more concise.
 
-> 其它表格将继续采用原有的"题目+选项+元数据"切片逻辑。
+Other tables will continue to use the original "question + options + metadata" slicing logic.
 
-### 构建知识库示例
+## Knowledge Graph Capabilities
+
+This project now includes knowledge graph capabilities powered by LightRAG. The knowledge graph module can:
+
+1. Extract entities and relationships from unstructured text
+2. Build a graph representation of the knowledge
+3. Perform complex reasoning through graph traversal
+4. Support multiple query modes (local, global, hybrid)
+
+### Query Modes
+
+- **Local Mode**: Focuses on context-dependent information, suitable for specific entity queries
+- **Global Mode**: Utilizes global knowledge, ideal for relationship discovery
+- **Hybrid Mode**: Combines local and global retrieval methods for comprehensive answers
+
+## Monitoring
+
+The project includes a web-based monitoring interface that allows you to:
+- View knowledge base statistics
+- Browse data samples with pagination
+- Analyze metadata distribution
+- Test search functionality
+
+Access the monitor at [http://localhost:8000/monitor](http://localhost:8000/monitor) when the API service is running.
+
+## Testing
+
+The project includes test suites for both RAG and fine-tuning modules:
 
 ```bash
-python build_knowledge_base.py  # 自动识别并处理上述表格
+# Run all tests
+python -m pytest tests/
+
+# Run specific test modules
+python -m pytest tests/test_rag.py
+python -m pytest tests/test_finetune.py
 ```
 
-如需扩展更多表格类型或自定义切片方式，请修改 `rag_module.py` 的 `build_from_csv` 方法。 
+## Troubleshooting
 
----
+### Common Issues
 
-## 精排（Qwen3-Reranker Cross-Encoder）能力说明
+1. **Service Unavailable Errors**: Ensure your Ollama service is running if using the Ollama provider
+2. **API Key Errors**: Verify your DashScope API key is correctly set in the `.env` file
+3. **Model Loading Issues**: Check that required models are downloaded and available
+4. **Port Conflicts**: Change the `API_PORT` in `rag_app/config.py` if port 8000 is in use
 
-本项目已集成Qwen3-Reranker cross-encoder模型，实现了高质量的相关性精排。
+### Getting Help
 
-### 精排检索流程
-1. **初步召回**：使用Qwen3-embedding模型对知识库切片进行向量检索，获得Top-K候选。
-2. **精排打分**：对每个"查询-切片"对，调用Qwen3-Reranker cross-encoder模型，输出yes/no概率，取yes概率作为相关性分数。
-3. **最终排序**：按相关性分数降序排序，选Top-N作为最终检索结果。
+For issues not covered in this README:
+1. Check the detailed [API Documentation](./api_documentation.md)
+2. Review the [Implementation Summary](./IMPLEMENTATION_SUMMARY.md)
+3. Open an issue on the GitHub repository
 
-### 支持的模型
-- 默认支持本地量化模型`Qwen3-Reranker-4B:Q4_K_M`，显存占用低，推理速度快。
-- 可根据需要切换为其他Qwen3-Reranker模型。
-
-### 主要API
-- `POST /search/reranked`：返回精排后的检索结果，`rerank_score`字段即为相关性分数。
-
-### 依赖
-- `transformers >= 4.51.0`
-- `torch >= 2.0`
-
-### 使用示例
-```python
-from rag_app.reranker import Qwen3Reranker
-reranker = Qwen3Reranker()
-scores = reranker.rerank(query, [chunk1, chunk2, ...])
-```
-
-### 性能建议
-- 推荐使用量化模型（如Q4_K_M）以降低显存需求。
-- 首次加载模型较慢，后续推理速度较快。
-
---- 
+For a more detailed implementation summary, see [Implementation Summary](./IMPLEMENTATION_SUMMARY.md).

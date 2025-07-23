@@ -1,154 +1,226 @@
-from fastapi import FastAPI, HTTPException, Request
+"""
+Main application script that demonstrates how to use both RAG and fine-tuning packages.
+This script sets up a FastAPI server that provides endpoints for both RAG and fine-tuning functionality.
+"""
+
+import os
+from typing import Dict, List, Optional
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-import uvicorn
-from rag_app import config
-from rag_app.rag_module import RAGManager  # 导入核心模块
-from rag_app.monitor import KnowledgeBaseMonitor  # 导入监视模块
 
-# --- FastAPI 应用初始化 ---
+# Import from our packages
+from finetune_app.finetune_module import FineTuneManager
+from rag_app.rag_module import RAGManager
+from rag_app.kg_module import KGManager
+from rag_app.monitor import KnowledgeBaseMonitor
+
+# Create FastAPI app
 app = FastAPI(
-    title="试卷客观题 RAG 检索 API (模块化)",
-    description="使用 RAGManager 模块提供语义检索服务，支持 Ollama 和 DashScope。",
-    version="3.0.0"
+    title="RAG and Fine-tuning API",
+    description="API for RAG search and model fine-tuning",
+    version="0.1.0",
 )
 
-# 挂载静态文件
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize our managers
+rag_manager = RAGManager()
+ft_manager = FineTuneManager()
+kg_manager = KGManager()
+
+# Set up templates and static files for the monitor UI
+templates = Jinja2Templates(directory="rag_app/templates")
 app.mount("/static", StaticFiles(directory="rag_app/static"), name="static")
 
-# 初始化模板
-templates = Jinja2Templates(directory="rag_app/templates")
+# Initialize the monitor
+kb_monitor = KnowledgeBaseMonitor(rag_manager.collection)
 
-# --- 应用生命周期事件 ---
-@app.on_event("startup")
-def startup_event():
-    """
-    应用启动时执行，初始化 RAGManager 并将其作为单例存储。
-    """
-    print("API 服务启动中...")
-    try:
-        # 创建 RAGManager 的单例，整个应用的生命周期内共享
-        app.state.rag_manager = RAGManager()
-        print("RAGManager 初始化成功，API 已准备就绪。")
-        
-        # 初始化监视器
-        app.state.monitor = KnowledgeBaseMonitor()
-        print("知识库监视器初始化成功。")
-    except Exception as e:
-        error_message = f"关键错误：RAGManager 初始化失败。API 将无法工作。错误: {e}"
-        print(error_message)
-        # 存储错误信息，以便在请求时返回
-        app.state.startup_error = error_message
-
-# --- API 端点 ---
-class SearchQuery(BaseModel):
+# Define request and response models
+class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
 
+class FineTuneRequest(BaseModel):
+    model_name: str
+    data_file: str
+    training_args: Optional[Dict] = None
+
+class KGInsertRequest(BaseModel):
+    text: str
+
+class KGQueryRequest(BaseModel):
+    query: str
+    mode: str = "hybrid"
+    top_k: int = 60
+
+# Define API routes
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <html>
+        <head>
+            <title>RAG and Fine-tuning API</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                h1 { color: #333; }
+                a { color: #0066cc; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+                .endpoint { margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+                .method { font-weight: bold; color: #009900; }
+            </style>
+        </head>
+        <body>
+            <h1>RAG and Fine-tuning API</h1>
+            <p>Welcome to the RAG and Fine-tuning API. Use the following endpoints:</p>
+            
+            <div class="endpoint">
+                <span class="method">GET</span> <a href="/docs">/docs</a> - Interactive API documentation
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span> <a href="/search">/search</a> - Search the knowledge base
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span> <a href="/search/reranked">/search/reranked</a> - Search with reranking
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span> <a href="/monitor">/monitor</a> - Knowledge base monitor UI
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span> <a href="/finetune">/finetune</a> - Fine-tune a model
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span> <a href="/kg/insert">/kg/insert</a> - Insert text into knowledge graph
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span> <a href="/kg/query">/kg/query</a> - Query the knowledge graph
+            </div>
+        </body>
+    </html>
+    """
+
 @app.post("/search")
-def search_knowledge_base(search_query: SearchQuery):
-    """
-    接收一个问题，使用 RAGManager 在知识库中进行语义搜索，
-    并返回最相关的"题目+选项"知识对。
-    """
-    if hasattr(app.state, 'startup_error'):
-        raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
-    
-    if not hasattr(app.state, 'rag_manager'):
-        raise HTTPException(status_code=503, detail="服务尚未完全初始化，请稍后再试。")
-
+async def search(request: SearchRequest):
     try:
-        # 直接调用 RAGManager 实例的 search 方法
-        results = app.state.rag_manager.search(
-            query=search_query.query, 
-            top_k=search_query.top_k
-        )
-        return results
+        return rag_manager.search(query=request.query, top_k=request.top_k)
     except Exception as e:
-        error_message = f"搜索过程中发生内部错误: {e}"
-        print(f"查询内容: {search_query.query}, 错误: {error_message}")
-        raise HTTPException(status_code=500, detail=error_message)
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- 监视相关端点 ---
-@app.get("/monitor", response_class=HTMLResponse)
-async def monitor_page(request: Request):
-    """
-    监视页面路由
-    """
+@app.post("/search/reranked")
+async def search_reranked(request: SearchRequest):
+    try:
+        return rag_manager.search_with_rerank(query=request.query, top_k=request.top_k)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/monitor")
+async def monitor_ui(request: Request):
     return templates.TemplateResponse("monitor.html", {"request": request})
 
 @app.get("/monitor/stats")
-async def get_monitor_stats():
-    """
-    获取知识库统计信息
-    """
-    if hasattr(app.state, 'startup_error'):
-        raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
-    
-    if not hasattr(app.state, 'monitor'):
-        raise HTTPException(status_code=503, detail="监视器尚未初始化，请稍后再试。")
-    
+async def monitor_stats():
     try:
-        stats = app.state.monitor.get_collection_stats()
-        return stats
+        return kb_monitor.get_stats()
     except Exception as e:
-        error_message = f"获取统计信息失败: {e}"
-        print(f"错误: {error_message}")
-        raise HTTPException(status_code=500, detail=error_message)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/monitor/samples")
-async def get_monitor_samples(limit: int = 10, offset: int = 0):
-    """
-    获取数据样本
-    """
-    if hasattr(app.state, 'startup_error'):
-        raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
-    
-    if not hasattr(app.state, 'monitor'):
-        raise HTTPException(status_code=503, detail="监视器尚未初始化，请稍后再试。")
-    
+async def monitor_samples(
+    limit: int = Query(10, description="Number of samples to return"),
+    offset: int = Query(0, description="Offset for pagination"),
+):
     try:
-        samples = app.state.monitor.get_data_samples(limit=limit, offset=offset)
-        return samples
+        return kb_monitor.get_samples(limit=limit, offset=offset)
     except Exception as e:
-        error_message = f"获取数据样本失败: {e}"
-        print(f"错误: {error_message}")
-        raise HTTPException(status_code=500, detail=error_message)
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- 精排相关端点 ---
-class RerankQuery(BaseModel):
-    query: str
-    top_k: int = 5
-
-@app.post("/search/reranked")
-async def search_with_rerank(rerank_query: RerankQuery):
-    """
-    使用Qwen3-Reranker cross-encoder进行精排检索
-    """
-    if hasattr(app.state, 'startup_error'):
-        raise HTTPException(status_code=503, detail=f"服务不可用: {app.state.startup_error}")
-    
-    if not hasattr(app.state, 'rag_manager'):
-        raise HTTPException(status_code=503, detail="服务尚未完全初始化，请稍后再试。")
-
+@app.post("/finetune")
+async def finetune(request: FineTuneRequest):
     try:
-        results = app.state.rag_manager.search_with_rerank(
-            query=rerank_query.query,
-            top_k=rerank_query.top_k
+        # Prepare data
+        data_dir = ft_manager.prepare_data(request.data_file)
+        
+        # Load model
+        ft_manager.load_model(request.model_name)
+        
+        # Fine-tune
+        model_path = ft_manager.fine_tune(
+            train_data_dir=data_dir,
+            training_args=request.training_args
         )
-        return results
+        
+        # Evaluate
+        metrics = ft_manager.evaluate(model_path=model_path)
+        
+        return {
+            "status": "success",
+            "model_path": model_path,
+            "metrics": metrics
+        }
     except Exception as e:
-        error_message = f"精排搜索过程中发生内部错误: {e}"
-        print(f"查询内容: {rerank_query.query}, 错误: {error_message}")
-        raise HTTPException(status_code=500, detail=error_message)
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- 运行服务 ---
+
+@app.post("/kg/insert")
+async def kg_insert(request: KGInsertRequest):
+    try:
+        # Initialize KG manager if not already initialized
+        if not hasattr(kg_manager, 'rag') or kg_manager.rag is None:
+            await kg_manager.initialize()
+        
+        # Insert text into knowledge graph
+        kg_manager.insert_text(request.text)
+        
+        return {"status": "success", "message": "Text inserted into knowledge graph"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/kg/query")
+async def kg_query(request: KGQueryRequest):
+    try:
+        # Initialize KG manager if not already initialized
+        if not hasattr(kg_manager, 'rag') or kg_manager.rag is None:
+            await kg_manager.initialize()
+        
+        # Query the knowledge graph
+        result = kg_manager.query(
+            query_text=request.query,
+            mode=request.mode,
+            top_k=request.top_k
+        )
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Run the application
 if __name__ == "__main__":
-    print("--- 启动 FastAPI 服务 (模块化版本) ---")
-    print(f"服务将运行在 http://{config.API_HOST}:{config.API_PORT}")
-    print("如果知识库尚未构建，请在另一终端运行 'python build_knowledge_base.py'。")
-    print(f"API 文档位于 http://127.0.0.1:{config.API_PORT}/docs")
-    print(f"监视页面位于 http://127.0.0.1:{config.API_PORT}/monitor")
-    uvicorn.run(app, host=config.API_HOST, port=config.API_PORT) 
+    # Get configuration from rag_app.config
+    from rag_app import config
+    
+    print(f"Starting API server on {config.API_HOST}:{config.API_PORT}")
+    uvicorn.run(
+        "main:app",
+        host=config.API_HOST,
+        port=config.API_PORT,
+        reload=True
+    )
